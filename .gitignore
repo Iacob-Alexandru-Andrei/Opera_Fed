@@ -161,9 +161,9 @@ cython_debug/
 #.idea/
 
 .vscode/
-outputs/
-results/
-logs/
+outputs/*
+results/*
+logs/*
 *.parquet
 *.pt
 *.yam
