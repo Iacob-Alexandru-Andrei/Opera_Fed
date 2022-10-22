@@ -69,6 +69,9 @@ def main(cfg: DictConfig) -> None:
         model_generator=model_generator,
     )
 
+    fit_agg_func = call(cfg.get_on_fit_metrics_agg_fn)
+    eval_agg_func = call(cfg.get_on_evaluate_metrics_agg_fn)
+
     strategy = instantiate(
         cfg.strategy.init,
         fraction_fit=(float(cfg.num_clients_per_round) / cfg.num_total_clients),
@@ -83,6 +86,8 @@ def main(cfg: DictConfig) -> None:
         evaluate_fn=evaluate_fn,
         initial_parameters=initial_parameters,
         accept_failures=False,
+        fit_metrics_aggregation_fn=fit_agg_func,
+        evaluate_metrics_aggregation_fn=eval_agg_func,
     )
 
     strategy.initial_parameters = initial_parameters
@@ -95,8 +100,9 @@ def main(cfg: DictConfig) -> None:
             fed_dir=fed_dir,
         )
         client = client_fn(0)
-        print(client.fit(weights, on_fit_config_fn(0))[-1])
-        print(client.evaluate(weights, on_fit_config_fn(0)))
+        # print(client.fit(weights, on_fit_config_fn(0))[-1])
+        # print(client.evaluate(weights, on_evaluate_config_fn(0)))
+        evaluate_fn(0, weights, on_evaluate_config_fn(0))
         hist = fl.simulation.start_simulation(
             client_fn=client_fn,
             num_clients=cfg.num_total_clients,

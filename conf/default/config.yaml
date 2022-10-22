@@ -8,7 +8,7 @@ data_directory: "/local/scratch/opera_fed/opera_spec"
 # Where to save the partitioned data and federated test set
 fed_dir: "/local/scratch/opera_fed/partitions/person_partitions"
 
-fed_test_file: "/local/scratch/opera_fed/partitions/person_partitions/6/test.pt"
+fed_test_file: "/local/scratch/opera_fed/partitions/person_partitions/6/fed_test.pt"
 fed_test_sampling_file: "/local/scratch/opera_fed/partitions/person_partitions/6/sampling.pt"
 data_type: "multimodal_spectrogram"
 namings:
@@ -31,7 +31,7 @@ activities: []
 sampling: "weight"
 y_sampling: "None"
 
-network: "toy"
+network: "hybridvit"
 
 
 # Should the partitionings be re-generated when the script is run?
@@ -39,8 +39,8 @@ recreate_partitions: False
 
 
 ####### Local training params for model #######
-batch_size: 20
-epochs_per_round: 1
+batch_size: 10
+epochs: 10
 weight_decay: 0.01
 gamma: 0.5
 step_size: 3
@@ -48,14 +48,17 @@ num_workers: 4
 
 
 ####### Federated strategy parameters #######
+num_rounds: 10
+epochs_per_round: 10
+fed_batch_size: 10
+fed_num_workers: 4
+
 num_clients_per_round: 2
 num_evaluate_clients_per_round: 2
 num_total_clients: 6
-num_rounds: 10
-
 ####### Ray and hydra params #######
-cpus_per_client: 1
-gpus_per_client: 0.33
+cpus_per_client: 4
+gpus_per_client: 1
 hydra.job.chdir: False
 is_simulation: True
 
@@ -113,8 +116,16 @@ get_fed_eval_fn:
   _target_: utils.flower.get_fed_eval_fn
   fed_test_file: ${fed_test_file}
   fed_test_sampling_file: ${fed_test_sampling_file}
-  batch_size: ${batch_size}
-  num_workers: ${num_workers}
+  batch_size: ${fed_batch_size}
+  num_workers: ${fed_num_workers}
+
+get_on_fit_metrics_agg_fn:
+  _target_: utils.flower.weighted_average
+
+
+get_on_evaluate_metrics_agg_fn:
+  _target_: utils.flower.weighted_average
+
 
 
 # Plot results

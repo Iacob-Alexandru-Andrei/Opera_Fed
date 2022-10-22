@@ -22,6 +22,12 @@ import numpy as np
 from data import prepare_one_dataloader
 import matplotlib.pyplot as plt
 
+from typing import List
+import flwr as fl
+from flwr.common import Metrics
+from collections import defaultdict
+import numbers
+
 
 def wrapper_func(func: Callable) -> Callable[[], Callable]:
     """Decorator to wrap any function
@@ -30,16 +36,17 @@ def wrapper_func(func: Callable) -> Callable[[], Callable]:
         func (Callable): Function to wrap
 
     Returns:
-        Callable[[], Callable]: Boxed function
+         Callable[[], Callable]: Boxed function
     """
     return lambda: func
 
 
+# Define metric aggregation function
 def get_generate_model(network):
-    def get_model():
+    def get_model(img_final_dim: int = 1120):
         nonlocal network
         if network == "vit":
-            img_size = [224, train_loader.dataset[0][0].shape[2]]
+            img_size = [224, img_final_dim]
             patch_size = [224, 224]  # [32,32]  [16,16]
             in_channels = 1
             n_classes = 6
@@ -66,7 +73,7 @@ def get_generate_model(network):
             )
 
         if network == "hybridvit":
-            img_size = (224, 1120)
+            img_size = (224, img_final_dim)
             patch_size = 224  # [32,32]  [16,16]
             in_channels = 1
             num_classes = 6
@@ -229,6 +236,7 @@ def get_fed_eval_fn(
             batch_size=batch_size,
             num_workers=num_workers,
         )
+        print(len(testloader))
         loss, accuracy = test_client(
             net=net,
             testloader=testloader,
@@ -284,3 +292,18 @@ def get_initial_parameters(model_generator: Callable) -> Parameters:
     parameters = ndarrays_to_parameters(weights)
 
     return parameters
+
+
+@wrapper_func
+def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
+    average_dict: Dict = defaultdict(list)
+    total_examples: int = 0
+    for num_examples, metrics_dict in metrics:
+        for key, val in metrics_dict.items():
+            if isinstance(val, numbers.Number):
+                average_dict[key].append(num_examples * val)  # type:ignore
+        total_examples += num_examples
+    return {
+        key: float(sum(val) / float(total_examples))
+        for key, val in average_dict.items()
+    }

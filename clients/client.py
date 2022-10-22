@@ -106,7 +106,7 @@ class RayClient(fl.client.NumPyClient):
         )
         # return local model and statistics
         weights = [val.cpu().numpy() for _, val in net.state_dict().items()]
-        return weights, len(train_loader), {"loss": loss}
+        return weights, len(train_loader), {"train_loss": loss}
 
     def evaluate(
         self, parameters: NDArrays, config: Dict[str, Scalar]
@@ -140,7 +140,7 @@ class RayClient(fl.client.NumPyClient):
             criterion=self.criterion_generator(),
         )
         # return statistics
-        return float(loss), len(valid_loader.dataset), {"accuracy": float(accuracy)}  # type: ignore
+        return float(loss), len(valid_loader.dataset), {"eval_accuracy": float(accuracy), "eval_loss": float(loss)}  # type: ignore
 
     def set_parameters(self, parameters: NDArrays):
         """Loads weights inside the network.
