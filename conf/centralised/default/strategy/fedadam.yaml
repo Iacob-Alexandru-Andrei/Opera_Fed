@@ -2,7 +2,7 @@
 name: FedAdam
 expected_accuracy: 52.5
 init:
-  _target_: flwr.server.strategy.FedAdam
+  _target_: strategies.saving_strategies.SaveFedAdam
   beta_1: 0.9
   beta_2: 0.99
   eta: 1.0

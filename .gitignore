@@ -169,3 +169,4 @@ logs/*
 *.yam
 *.csv
 *.pth
+*.npz

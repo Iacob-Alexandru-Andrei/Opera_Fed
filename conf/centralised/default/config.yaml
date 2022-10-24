@@ -2,28 +2,24 @@
 
 
 ####### Paths: all absolute for now, might change to relative ####### 
-dataset_name: "Opera_fed_by_person"
+dataset_name: "Opera_centrailsed_default"
 data_directory: "/local/scratch/opera_fed/opera_spec"
 
 # Where to save the partitioned data and federated test set
-fed_dir: "/local/scratch/opera_fed/partitions/person_partitions"
+fed_dir: "/local/scratch/opera_fed/partitions/centralised_default"
 
-fed_test_file: "/local/scratch/opera_fed/partitions/person_partitions/6/fed_test.pt"
-fed_test_sampling_file: "/local/scratch/opera_fed/partitions/person_partitions/6/sampling.pt"
+fed_test_file: "/local/scratch/opera_fed/partitions/centralised_default/0/test.pt"
+fed_test_sampling_file: "/local/scratch/opera_fed/partitions/centralised_default/0/sampling.pt"
 data_type: "multimodal_spectrogram"
 namings:
   - "exp_15_pwr_spectrograms"
   - "exp_10_amp_spec_only_STFT"
   - "exp_11_phdiff_spec_only_STFT"
 
-person_names:
-  - "person_One" 
-  - "person_Two"
-  - "person_Three" 
-  - "person_Four"
-  - "person_Five"
-  - "person_Six"
-  - "person_Seven"
+partition_strs:
+  - ""
+
+save_rounds: []
 
 views: 'associated'
 axis: 3
@@ -33,14 +29,12 @@ y_sampling: "None"
 
 network: "hybridvit"
 
-
 # Should the partitionings be re-generated when the script is run?
 recreate_partitions: False
 
 
 ####### Local training params for model #######
 batch_size: 10
-epochs: 10
 weight_decay: 0.01
 gamma: 0.5
 step_size: 3
@@ -48,14 +42,14 @@ num_workers: 4
 
 
 ####### Federated strategy parameters #######
-num_rounds: 10
-epochs_per_round: 10
+num_rounds: 1
+epochs_per_round: 100
 fed_batch_size: 10
 fed_num_workers: 4
 
-num_clients_per_round: 2
-num_evaluate_clients_per_round: 2
-num_total_clients: 6
+num_clients_per_round: 1
+num_evaluate_clients_per_round: 0
+num_total_clients: 1
 ####### Ray and hydra params #######
 cpus_per_client: 4
 gpus_per_client: 1
@@ -65,15 +59,13 @@ is_simulation: True
 
 ############################ API ############################
 
-
-
 # Generate the dataset
 # loads folder containing .csv or .parquet files for now
 generate_partitions:
   _target_: "data.partition_data.create_person_partitions"
   data_type: ${data_type}
   data_directory: ${data_directory}
-  person_names: ${person_names}
+  person_names: ${partition_strs}
   namings: ${namings}
   sampling: ${sampling}
   y_sampling: ${y_sampling}
@@ -85,7 +77,6 @@ generate_partitions:
 get_generate_model:
   _target_: "utils.flower.get_generate_model"
   network: ${network}
-
 
 
 # Returns a client generating function
@@ -125,7 +116,6 @@ get_on_fit_metrics_agg_fn:
 
 get_on_evaluate_metrics_agg_fn:
   _target_: utils.flower.weighted_average
-
 
 
 # Plot results

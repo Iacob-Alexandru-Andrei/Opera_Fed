@@ -102,4 +102,4 @@ def save_partition(
 
     path_dir = fed_dir / f"{idx}"
     path_dir.mkdir(exist_ok=True, parents=True)
-    torch.save(partition, path_dir / f"{partition_type}.pt")
+    torch.save(partition, path_dir / f"{partition_type}.pt", pickle_protocol=5)

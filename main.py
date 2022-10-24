@@ -1,5 +1,5 @@
 """Runs AdaptiveFederated Optimization for CIFAR10/100."""
-from os import chdir, environ
+from os import chdir, getcwd, environ
 
 from pathlib import Path
 
@@ -7,9 +7,11 @@ import flwr as fl
 import hydra
 from flwr.common.typing import Parameters
 from flwr.server import ServerConfig
-from hydra.utils import call, get_original_cwd, instantiate
+from hydra.utils import call, get_original_cwd, instantiate, to_absolute_path
+from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig
 from flwr.common.parameter import ndarrays_to_parameters
+import json
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -20,15 +22,18 @@ import shutup
 shutup.please()
 
 
-@hydra.main(config_path="conf/default", config_name="config", version_base=None)
+@hydra.main(
+    config_path="conf/federated/default", config_name="config", version_base=None
+)
 def main(cfg: DictConfig) -> None:
     """General-purpose main function that receives cfg from Hydra."""
     # Make sure we are on the right directory.
     # This will not be necessary in hydra 1.3
     environ["HYDRA_FULL_ERROR"] = "1"
     environ["NUMEXPR_MAX_THREADS"] = "12"
+    output_directory = Path(to_absolute_path(HydraConfig.get().runtime.output_dir))
     original_cwd = get_original_cwd()
-    print(original_cwd)
+
     chdir(original_cwd)
 
     model_generator = call(cfg.get_generate_model)
@@ -88,6 +93,8 @@ def main(cfg: DictConfig) -> None:
         accept_failures=False,
         fit_metrics_aggregation_fn=fit_agg_func,
         evaluate_metrics_aggregation_fn=eval_agg_func,
+        save_rounds=cfg.save_rounds,
+        save_directory=output_directory,
     )
 
     strategy.initial_parameters = initial_parameters
@@ -120,7 +127,9 @@ def main(cfg: DictConfig) -> None:
         )
 
     # Plot results
-    call(cfg.plot_results, hist=hist)
+    call(cfg.plot_results, hist=hist, output_directory=output_directory)
+    with open(output_directory / "hist.json", "w", encoding="utf-8") as f:
+        json.dump(hist.__dict__, f, ensure_ascii=False, indent=4)
 
 
 if __name__ == "__main__":

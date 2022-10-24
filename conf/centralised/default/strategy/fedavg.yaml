@@ -2,6 +2,6 @@
 name: FedAvg
 expected_accuracy: 94.3
 init:
-  _target_: flwr.server.strategy.FedAvg
+  _target_: strategies.saving_strategies.SaveFedAvg
   initial_parameters: None
 eta_l: 0.0001 # client's learning rate

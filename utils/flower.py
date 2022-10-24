@@ -255,6 +255,7 @@ def plot_metric_from_history(
     strategy_name: str,
     expected_maximum: float,
     save_plot_path: Path,
+    output_directory: Path,
 ) -> None:
     """Simple plotting method for Classification Task.
 
@@ -275,6 +276,7 @@ def plot_metric_from_history(
     plt.ylabel("Accuracy")
     plt.legend(loc="upper left")
     plt.savefig(save_plot_path)
+    plt.savefig(output_directory / "graph.png")
     plt.close()
 
 
@@ -301,9 +303,15 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     for num_examples, metrics_dict in metrics:
         for key, val in metrics_dict.items():
             if isinstance(val, numbers.Number):
-                average_dict[key].append(num_examples * val)  # type:ignore
+                average_dict[key].append((num_examples, val))  # type:ignore
         total_examples += num_examples
     return {
-        key: float(sum(val) / float(total_examples))
+        key: {
+            "avg": float(
+                sum([num_examples * metr for num_examples, metr in val])
+                / float(total_examples)
+            ),
+            "all": val,
+        }
         for key, val in average_dict.items()
     }
