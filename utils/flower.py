@@ -236,7 +236,6 @@ def get_fed_eval_fn(
             batch_size=batch_size,
             num_workers=num_workers,
         )
-        print(len(testloader))
         loss, accuracy = test_client(
             net=net,
             testloader=testloader,

@@ -107,8 +107,8 @@ def main(cfg: DictConfig) -> None:
             fed_dir=fed_dir,
         )
         client = client_fn(0)
-        # print(client.fit(weights, on_fit_config_fn(0))[-1])
-        # print(client.evaluate(weights, on_evaluate_config_fn(0)))
+        print(client.fit(weights, on_fit_config_fn(0))[-1])
+        print(client.evaluate(weights, on_evaluate_config_fn(0)))
         evaluate_fn(0, weights, on_evaluate_config_fn(0))
         hist = fl.simulation.start_simulation(
             client_fn=client_fn,
