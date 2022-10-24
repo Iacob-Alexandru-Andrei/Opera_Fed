@@ -27,6 +27,8 @@ partition_strs:
 
 save_rounds: []
 
+resume_model: null
+
 views: 'associated'
 axis: 3
 activities: []
@@ -111,6 +113,7 @@ gen_on_evaluate_config_fn:
 
 get_initial_parameters:
   _target_: utils.flower.get_initial_parameters
+  resume_model: ${resume_model}
 
 get_fed_eval_fn:
   _target_: utils.flower.get_fed_eval_fn

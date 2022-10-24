@@ -279,7 +279,9 @@ def plot_metric_from_history(
     plt.close()
 
 
-def get_initial_parameters(model_generator: Callable) -> Parameters:
+def get_initial_parameters(
+    model_generator: Callable, resume_model: Optional[str]
+) -> Parameters:
     """Generates a model and returns its parameters to be used for initialization
 
     Args:
@@ -288,8 +290,16 @@ def get_initial_parameters(model_generator: Callable) -> Parameters:
     Returns:
         Parameters: Parameters to be sent back to the server for initializing the model
     """
-    model = model_generator()
-    weights = [val.cpu().numpy() for _, val in model.state_dict().items()]
+    if resume_model is None:
+        weights = [
+            val.cpu().numpy() for _, val in model_generator().state_dict().items()
+        ]
+    else:
+        weights = [
+            arr
+            for val in np.load(resume_model, allow_pickle=True).values()
+            for arr in val
+        ]
     parameters = ndarrays_to_parameters(weights)
 
     return parameters

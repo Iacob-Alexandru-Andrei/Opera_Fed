@@ -25,7 +25,8 @@ partition_strs:
   - "person_Six"
   - "person_Seven"
 
-save_rounds: []
+save_rounds: [0, 1]
+resume_model: "/home/aai30/nfs-share/projects/Opera_Fed/outputs/2022-10-24/21-26-56/saved_models/round_1_weights.npz"
 
 views: 'associated'
 axis: 3
@@ -111,6 +112,7 @@ gen_on_evaluate_config_fn:
 
 get_initial_parameters:
   _target_: utils.flower.get_initial_parameters
+  resume_model: ${resume_model}
 
 get_fed_eval_fn:
   _target_: utils.flower.get_fed_eval_fn

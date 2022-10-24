@@ -44,10 +44,8 @@ def train_client(
     device: str,
     optimizer,
     criterion,
-) -> float:
+):
     """Train the network on the training set."""
-    if not epochs:
-        return 0.0
     net.train()
     for _ in range(epochs):
         for data, labels in trainloader:
@@ -56,7 +54,6 @@ def train_client(
             loss = criterion(net(data), labels)
             loss.backward()
             optimizer.step()
-    return loss
 
 
 def test_client(

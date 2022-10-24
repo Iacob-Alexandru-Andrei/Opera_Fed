@@ -96,7 +96,7 @@ class RayClient(fl.client.NumPyClient):
         scheduler = self.scheduler_generator(
             optimizer, step_size=config["step_size"], gamma=config["gamma"]
         )
-        loss = train_client(
+        train_client(
             net,
             trainloader=train_loader,
             epochs=config["epochs"],
@@ -106,7 +106,7 @@ class RayClient(fl.client.NumPyClient):
         )
         # return local model and statistics
         weights = [val.cpu().numpy() for _, val in net.state_dict().items()]
-        return weights, len(train_loader), {"train_loss": loss}
+        return weights, len(train_loader), metr
 
     def evaluate(
         self, parameters: NDArrays, config: Dict[str, Scalar]

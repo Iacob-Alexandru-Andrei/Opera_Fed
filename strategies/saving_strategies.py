@@ -1,6 +1,7 @@
 from flwr.server.strategy import FedAdagrad, FedAvg, FedAdam, FedAvgM, FedYogi, Strategy
-import numpy as np
+import torch
 from typing import List
+import numpy as np
 from flwr.common.parameter import parameters_to_ndarrays
 from pathlib import Path
 
@@ -20,8 +21,8 @@ class SaveMixin:
             aggregate_ndarrays: List[np.ndarray] = parameters_to_ndarrays(params)
             save_dir = Path(self.save_directory) / "saved_models"
             save_dir.mkdir(parents=True, exist_ok=True)
-            np.savez(
-                save_dir / f"round_{server_round}_weights.npz",
+            np.savez_compressed(
+                save_dir / f"round_{server_round}_weights.pt",
                 aggregate_ndarrays,
             )
         return params, metrics
