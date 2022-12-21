@@ -10,7 +10,7 @@ import numpy as np
 
 from flwr.common.typing import NDArrays, Scalar
 from torch.utils.data import DataLoader
-from data.partition_data import get_partition_data
+from data.partition_data import get_partition_data, prepare_one_dataloader
 from train import train_client, test_client
 
 
@@ -25,6 +25,8 @@ class RayClient(fl.client.NumPyClient):
         criterion_generator: Callable,
         optimizer_generator: Callable,
         scheduler_generator: Callable,
+        transform_x: Callable,
+        transform_y: Callable,
     ):
         """Implements Ray Virtual Client.
 
@@ -41,6 +43,8 @@ class RayClient(fl.client.NumPyClient):
         self.criterion_generator = criterion_generator
         self.optimizer_generator = optimizer_generator
         self.scheduler_generator = scheduler_generator
+        self.transform_x = transform_x
+        self.transform_y = transform_y
 
     def get_properties(self, config: Dict[str, Scalar]) -> Dict[str, Scalar]:
         """Returns properties for this client.
@@ -82,14 +86,24 @@ class RayClient(fl.client.NumPyClient):
         """
         net = self.set_parameters(parameters)
         net.to(self.device)
+
         # train
-        train_loader = get_partition_data(
+        X, y, sampling = get_partition_data(
             path_to_data=Path(self.fed_dir),
             cid=self.cid,
             partition_type="train",
+        )
+
+        train_loader = prepare_one_dataloader(
+            X_train=X,
+            y_train=y,
+            sampling=sampling,
             batch_size=config["batch_size"],
             num_workers=config["num_workers"],
+            transform_x=self.transform_x,
+            transform_y=self.transform_y,
         )
+
         optimizer = self.optimizer_generator(
             net.parameters(), lr=config["client_learning_rate"], weight_decay=0.01
         )
@@ -106,12 +120,12 @@ class RayClient(fl.client.NumPyClient):
         )
         # return local model and statistics
         weights = [val.cpu().numpy() for _, val in net.state_dict().items()]
-        return weights, len(train_loader), metr
+        return weights, len(train_loader), {}
 
     def evaluate(
         self, parameters: NDArrays, config: Dict[str, Scalar]
     ) -> Tuple[float, int, Dict[str, float]]:
-        """Implements distributed evaluation for a given client.
+        """Implements di\stributed evaluation for a given client.
 
         Args:
             parameters (NDArrays): Set of weights being used for evaluation
@@ -124,23 +138,32 @@ class RayClient(fl.client.NumPyClient):
         """
         net = self.set_parameters(parameters)
         net.to(self.device)
+
         # load data for this client and get valloader
-        valid_loader = get_partition_data(
+        X, y, sampling = get_partition_data(
             path_to_data=Path(self.fed_dir),
             cid=self.cid,
             partition_type="test",
+        )
+
+        valid_loader = prepare_one_dataloader(
+            X_train=X,
+            y_train=y,
+            sampling=sampling,
             batch_size=config["batch_size"],
             num_workers=config["num_workers"],
+            transform_x=self.transform_x,
+            transform_y=self.transform_y,
         )
         # evaluate
-        loss, accuracy = test_client(
+        loss, accuracy, f1_macro = test_client(
             net=net,
             testloader=valid_loader,
             device=self.device,
             criterion=self.criterion_generator(),
         )
         # return statistics
-        return float(loss), len(valid_loader.dataset), {"eval_accuracy": float(accuracy), "eval_loss": float(loss)}  # type: ignore
+        return float(loss), len(valid_loader.dataset), {"eval_accuracy": float(accuracy), "eval_loss": float(loss), "eval_f1_macro": f1_macro}  # type: ignore
 
     def set_parameters(self, parameters: NDArrays):
         """Loads weights inside the network.
@@ -164,6 +187,8 @@ class RayClient(fl.client.NumPyClient):
 def get_ray_client_fn(
     model_generator,
     fed_dir,
+    transform_x: Callable,
+    transform_y: Callable,
     criterion_generator: Callable = nn.CrossEntropyLoss,
     optimizer_generator: Callable = torch.optim.AdamW,
     scheduler_generator: Callable = torch.optim.lr_scheduler.StepLR,
@@ -189,6 +214,8 @@ def get_ray_client_fn(
             criterion_generator=criterion_generator,
             optimizer_generator=optimizer_generator,
             scheduler_generator=scheduler_generator,
+            transform_x=transform_x,
+            transform_y=transform_y,
         )
 
     return client_fn

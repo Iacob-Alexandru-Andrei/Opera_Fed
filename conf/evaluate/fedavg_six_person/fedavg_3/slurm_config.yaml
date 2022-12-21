@@ -1,0 +1,175 @@
+---
+# For results outputting
+dataset_name: "uwb1"
+
+####### Paths: all absolute for now, might change to relative ####### 
+
+# Where to find the directory with the original split data from Pedro
+# Can be lifted up to just .../opera/data if multiple folders have to be combined
+root_dir: "/nfs-share/aai30/projects/Opera_Fed/data/test_uwb1"
+
+# Where to store the whole pre-partition dataset
+# Might be too big in some scenarions
+target_dataset_file: "/nfs-share/aai30/projects/Opera_Fed/data/raw/uwb1.parquet"
+
+# Where to save the partitioned data and federated test set
+fed_dir: "/nfs-share/aai30/projects/Opera_Fed/data/partitioned/uwb1"
+
+# Percentage of the entire dataset 
+# for federated testing
+fed_test_perc: 10
+
+# Percentage of the local client dataset
+# to be used for local evaluation
+local_test_perc: 10
+
+# Should the partitionings be re-generated when the script is run?
+recreate_partitions: True
+
+####### Model parameters for toy model #######
+input_dim: 63
+output_dim: 7
+
+####### Local training params for model #######
+batch_size: 20
+epochs_per_round: 1
+
+
+####### Federated strategy parameters #######
+num_clients_per_round: 1
+num_evaluate_clients_per_round: 1
+num_total_clients: 1
+num_rounds: 10
+
+####### Ray and hydra params #######
+cpus_per_client: 1
+gpus_per_client: 0.33
+hydra.job.chdir: False
+is_simulation: True
+
+
+############################ API ############################
+
+
+####### Dataset Generation #######
+
+# Generate the dataset
+# loads folder containing .csv or .parquet files for now
+generate_dataset:
+  _target_: "utils.dataset_utils.generate_dataset_df_from_folder"
+  source_directory: ${root_dir}
+  target_dataset_file: ${target_dataset_file}
+
+# Process the dataset non-target dataframe into usable training data
+# for now, it just returns a list of values most of which are strings
+get_process_df_function:
+  _target_:  utils.dataset_utils.to_values
+
+# Process the targets into categorical values
+# for now it maps activities to their index
+get_process_targets_function:
+  _target_:  utils.dataset_utils.process_targets
+
+# Generates the federated test set
+# by taking a certain percentage of entire dataset
+# maybe change to taking out one client?
+get_generate_fed_test_set:
+  _target_: utils.dataset_utils.get_percentage_split
+  test_percentage: ${fed_test_perc}
+
+# Split each partition/client into a train/test set
+get_train_test_split_function:
+  _target_: utils.dataset_utils.get_percentage_split
+  test_percentage: ${local_test_perc}
+
+# Parition dataset into clients
+# for now it splits by person_id and applies process_df and process_targets
+# to all clients, it also calls the train/test/fed_test split functions
+get_partition_function:
+ _target_: utils.dataset_utils.partition_by_person
+
+# Takes the previous arbitrary partitioning function
+# applies it to the dataset and saves the train/test/fed_test datasets
+gen_federated_partitions:
+  _target_: utils.dataset_utils.partition_and_save_dataset
+  recreate_partitions: ${recreate_partitions}
+  target_dataset_file: ${target_dataset_file}
+  fed_dir: ${fed_dir}
+
+# For application during dataloading in pytorch
+# for now, it just returns a placeholder tensor of the length
+# of the number of columns that the dataset holds
+get_data_transform:
+   _target_: utils.dataset_utils.static_data_transform
+
+# Just sends labels to tensor
+get_target_transform:
+   _target_: utils.dataset_utils.target_to_tensor
+
+# Generates a model
+# current target is a toy fully connected layer
+get_model_generator:
+  _target_: models.toy_model.toy_model_generator
+  input_dim: ${input_dim}
+  output_dim: ${output_dim}
+  
+# Returns a client generating function
+# to call from the simulation agent
+get_ray_client_fn:
+  _target_: clients.client.get_ray_client_fn
+  fed_dir: ${fed_dir}
+
+# Returns a federated evaluation function
+# same as a client evaluate except it uses
+# the federated test-set
+get_eval_fn:
+  _target_: utils.dataset_utils.get_fed_eval_fn
+  fed_dir: ${fed_dir}
+
+# Handles training parameters per round for each client
+# sadly must be homogenous in the Flower implementation
+gen_on_fit_config_fn:
+  _target_: utils.flower_utils.gen_on_fit_config_fn
+  epochs_per_round: ${epochs_per_round}
+  batch_size: ${batch_size}
+
+# Plot results
+# unlikely to change
+plot_results:
+  _target_: utils.flower_utils.plot_metric_from_history
+  dataset_name: ${dataset_name}
+  strategy_name: ${strategy.name}
+  expected_maximum: ${strategy.expected_accuracy}
+  save_plot_path: ./${dataset_name}_${strategy.name}.png
+
+ray_config:
+  include_dashboard: False
+
+defaults:
+  - _self_
+  - strategy: "fedavg"
+
+# Slurm parameters
+# @package hydra.launcher
+submitit_folder: $&#123;hydra.sweep.dir/.submitit/%j
+timeout_min: 60
+cpus_per_task: 4
+gpus_per_node: 4
+tasks_per_node: 4
+mem_gb: null
+nodes: 1
+name: ${hydra.job.name}
+_target_: hydra_plugins.hydra_submitit_launcher.submitit_launcher.SlurmLauncher
+partition: null
+comment: null
+constraint: null
+exclude: null
+cpus_per_gpu: null
+gpus_per_task: null
+mem_per_gpu: null
+mem_per_cpu: null
+signal_delay_s: 120
+max_num_timeout: 0
+additional_parameters: {}
+array_parallelism: 256
+setup: null

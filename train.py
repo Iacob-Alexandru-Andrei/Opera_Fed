@@ -56,15 +56,78 @@ def train_client(
             optimizer.step()
 
 
+def train_federated_local_client(
+    federated_model: Module,
+    local_model: Module,
+    federated_optimizer,
+    local_optimizer,
+    federated_alpha,
+    local_alpha,
+    trainloader: DataLoader,
+    epochs: int,
+    device: str,
+    criterion,
+    T=1,
+):
+    loss_kl = nn.KLDivLoss(reduction="batchmean")
+    """Train the network on the training set."""
+    federated_model.train()
+    local_model.train()
+    for _ in range(epochs):
+        for data, labels in trainloader:
+            data, labels = data.to(device), labels.to(device)
+
+            # Train federated model
+
+            # Compute outputs
+            federated_outputs = federated_model(data)
+            local_outputs = local_model(data)
+
+            # Compute standard loss
+            local_ce_loss = criterion(local_outputs, labels)
+            federated_ce_loss = criterion(federated_outputs, labels)
+
+            # Use federated model as teacher
+            local_kl_loss = loss_kl(
+                torch.nn.functional.log_softmax(local_outputs / T, dim=1),
+                torch.nn.functional.softmax(federated_outputs / T, dim=1),
+            )
+
+            # Use local model as teacher
+            federated_kl_loss = loss_kl(
+                torch.nn.functional.log_softmax(federated_outputs / T, dim=1),
+                torch.nn.functional.softmax(local_outputs / T, dim=1),
+            )
+
+            # Computer local loss
+            local_loss = local_kl_loss * (local_alpha * T * T) + local_ce_loss * (
+                1.0 - local_alpha
+            )
+
+            # Compute federated loss
+            federated_loss = federated_kl_loss * (
+                federated_alpha * T * T
+            ) + federated_ce_loss * (1.0 - federated_alpha)
+
+            local_optimizer.zero_grad()
+            local_loss.backwards()
+            local_optimizer.step()
+
+            federated_optimizer.zero_grad()
+            federated_loss.backward()
+            federated_optimizer.step()
+
+
 def test_client(
     net: Module,
     testloader: DataLoader,
     device: str,
     criterion,
-) -> Tuple[float, float]:
+) -> Tuple[float, float, float]:
     """Validate the network on a test set."""
     correct, total, loss = 0, 0, 0.0
     net.eval()
+    f1_macro = 0.0
     with torch.no_grad():
         for data in testloader:
             data, labels = data[0].to(device), data[1].to(device)
@@ -73,8 +136,11 @@ def test_client(
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
+            f1_macro += f1_score(
+                labels.cpu().view(-1), predicted.cpu().view(-1), average="macro"
+            ) / len(testloader)
     accuracy = correct / total
-    return loss, accuracy
+    return loss, accuracy, f1_macro
 
 
 def train(

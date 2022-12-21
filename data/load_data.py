@@ -445,7 +445,7 @@ def import_multiple_modalities(
                 i = i + 1
                 del datas
 
-        if len(os.listdir(directory)) == 2:
+        if len(os.listdir(directory)) >= 2:
             filepath = directory + os.listdir(directory)[0]
             datas = import_nuc_data(
                 filepath,

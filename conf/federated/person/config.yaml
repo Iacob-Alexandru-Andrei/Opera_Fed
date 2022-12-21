@@ -1,0 +1,153 @@
+---
+
+
+####### Paths: all absolute for now, might change to relative ####### 
+dataset_name: "Opera_fed_by_person"
+data_directory: "/local/scratch/opera_fed/opera_spec"
+
+# Where to save the partitioned data and federated test set
+fed_dir: "/local/scratch/opera_fed/partitions/person_partitions"
+
+fed_test_file: "/local/scratch/opera_fed/partitions/person_partitions/6/fed_test.pt"
+fed_test_sampling_file: "/local/scratch/opera_fed/partitions/person_partitions/6/sampling.pt"
+data_type: "multimodal_spectrogram"
+namings:
+  - "exp_15_pwr_spectrograms"
+  - "exp_10_amp_spec_only_STFT"
+  # - "exp_11_phdiff_spec_only_STFT"
+
+partition_strs:
+  - "person_One" 
+  - "person_Two"
+  - "person_Three" 
+  - "person_Four"
+  - "person_Five"
+  - "person_Six"
+  - "person_Seven"
+
+save_rounds: [10]
+
+
+views: 'associated'
+axis: 3
+activities: []
+sampling: "weight"
+y_sampling: "None"
+
+network: "hybridvit"
+
+resume_model: null
+
+
+# Should the partitionings be re-generated when the script is run?
+recreate_partitions: False
+debug: False
+
+####### Local training params for model #######
+batch_size: 10
+epochs: 10
+weight_decay: 0.01
+gamma: 0.5
+step_size: 3
+num_workers: 4
+
+
+####### Federated strategy parameters #######
+num_rounds: 10
+epochs_per_round: 10
+fed_batch_size: 10
+fed_num_workers: 4
+
+num_clients_per_round: 2
+num_evaluate_clients_per_round: 2
+num_total_clients: 6
+####### Ray and hydra params #######
+cpus_per_client: 4
+gpus_per_client: 1
+hydra.job.chdir: False
+is_simulation: True
+
+
+############################ API ############################
+
+# Generate the dataset
+# loads folder containing .csv or .parquet files for now
+generate_partitions:
+  _target_: "data.partition_data.create_person_partitions"
+  data_type: ${data_type}
+  data_directory: ${data_directory}
+  person_names: ${partition_strs}
+  namings: ${namings}
+  sampling: ${sampling}
+  y_sampling: ${y_sampling}
+  activities: ${activities}
+  views: ${views}
+  axis: ${axis}
+
+
+get_generate_model:
+  _target_: "utils.flower.get_generate_model"
+  network: ${network}
+
+
+get_transform_y:
+  _target_: "utils.flower.get_transform_noop"
+
+
+get_transform_x:
+  _target_: "utils.flower.get_transform_noop"
+
+# Returns a client generating function
+# to call from the simulation agent
+get_ray_client_fn:
+  _target_: clients.client.get_ray_client_fn
+
+
+# Handles training parameters per round for each client
+gen_on_fit_config_fn:
+  _target_: utils.flower.gen_on_fit_config_fn
+  epochs_per_round: ${epochs_per_round}
+  batch_size: ${batch_size}
+  weight_decay: ${weight_decay}
+  gamma: ${gamma}
+  step_size: ${step_size}
+  num_workers: ${num_workers}
+
+gen_on_evaluate_config_fn:
+  _target_: utils.flower.gen_on_evaluate_config_fn
+  batch_size: ${batch_size}
+  num_workers: ${num_workers}
+
+get_initial_parameters:
+  _target_: utils.flower.get_initial_parameters
+  resume_model: ${resume_model}
+
+get_fed_eval_fn:
+  _target_: utils.flower.get_fed_eval_fn
+  fed_test_file: ${fed_test_file}
+  fed_test_sampling_file: ${fed_test_sampling_file}
+  batch_size: ${fed_batch_size}
+  num_workers: ${fed_num_workers}
+
+get_on_fit_metrics_agg_fn:
+  _target_: utils.flower.weighted_average
+
+
+get_on_evaluate_metrics_agg_fn:
+  _target_: utils.flower.weighted_average
+
+# Plot results
+# unlikely to change
+plot_results:
+  _target_: utils.flower.plot_metric_from_history
+  dataset_name: ${dataset_name}
+  strategy_name: ${strategy.name}
+  expected_maximum: ${strategy.expected_accuracy}
+  save_plot_path: ./${dataset_name}_${strategy.name}.png
+
+ray_config:
+  include_dashboard: False
+
+defaults:
+  - _self_
+  - strategy: "fedavg"

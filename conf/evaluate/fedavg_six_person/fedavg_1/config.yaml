@@ -1,0 +1,67 @@
+---
+####### Paths: all absolute for now, might change to relative ####### 
+dataset_name: "Opera_evaluate"
+data_directory: "/local/scratch/opera_fed/opera_spec"
+
+# Where to save the partitioned data and federated test set
+fed_dir: "/local/scratch/opera_fed/partitions/person_partitions"
+
+resume_model: "/home/aai30/nfs-share/projects/Opera_Fed/outputs/14-22-40_federated_six_people_fedavg/saved_models/round_10_weights.pt.npz"
+
+model_name: "test"
+
+fed_test_files: 
+  - "/local/scratch/opera_fed/partitions/person_partitions/6/fed_test.pt"
+  - "/local/scratch/opera_fed/partitions/centralised_default/0/test.pt"
+fed_test_sampling_files: 
+  - "/local/scratch/opera_fed/partitions/person_partitions/6/sampling.pt"
+  - "/local/scratch/opera_fed/partitions/centralised_default/0/sampling.pt"
+
+network: "hybridvit"
+
+fed_batch_size: 10
+fed_num_workers: 4
+
+####### Hydra params #######
+hydra.job.chdir: False
+
+
+############################ API ############################
+get_generate_model:
+  _target_: "utils.flower.get_generate_model"
+  network: ${network}
+
+get_transform_y:
+  _target_: "utils.flower.get_transform_noop"
+
+
+get_transform_x:
+  _target_: "utils.flower.get_transform_noop"
+
+
+
+get_initial_parameters:
+  _target_: utils.flower.get_initial_parameters
+  resume_model: ${resume_model}
+
+get_fed_eval_fn:
+  _target_: utils.flower.get_fed_eval_fn
+  fed_test_file: ${fed_test_file}
+  fed_test_sampling_file: ${fed_test_sampling_file}
+  batch_size: ${fed_batch_size}
+  num_workers: ${fed_num_workers}
+
+# Plot results
+# unlikely to change
+plot_results:
+  _target_: utils.flower.plot_metric_from_history
+  dataset_name: ${dataset_name}
+  strategy_name: ${strategy.name}
+  expected_maximum: ${strategy.expected_accuracy}
+  save_plot_path: ./${dataset_name}_${strategy.name}.png
+
+ray_config:
+  include_dashboard: False
+
+defaults:
+  - _self_

@@ -2,19 +2,23 @@
 
 
 ####### Paths: all absolute for now, might change to relative ####### 
-dataset_name: "Opera_fed_by_person"
+dataset_name: "Opera_fed_person_modality"
 data_directory: "/local/scratch/opera_fed/opera_spec"
 
 # Where to save the partitioned data and federated test set
-fed_dir: "/local/scratch/opera_fed/partitions/person_partitions"
+fed_dir: "/local/scratch/opera_fed/partitions/person_modality"
 
-fed_test_file: "/local/scratch/opera_fed/partitions/person_partitions/6/fed_test.pt"
-fed_test_sampling_file: "/local/scratch/opera_fed/partitions/person_partitions/6/sampling.pt"
+fed_test_file: "/local/scratch/opera_fed/partitions/person_modality/fed_test_partition/fed_test.pt"
+fed_test_sampling_file: "/local/scratch/opera_fed/partitions/person_modality/fed_test_partition/sampling.pt"
 data_type: "multimodal_spectrogram"
 namings:
   - "exp_15_pwr_spectrograms"
   - "exp_10_amp_spec_only_STFT"
-  - "exp_11_phdiff_spec_only_STFT"
+  # - "exp_11_phdiff_spec_only_STFT"
+
+split_modalities: True
+
+input_dim: 1120
 
 partition_strs:
   - "person_One" 
@@ -25,9 +29,8 @@ partition_strs:
   - "person_Six"
   - "person_Seven"
 
-save_rounds: []
+save_rounds: [10]
 
-resume_model: null
 
 views: 'associated'
 axis: 3
@@ -36,6 +39,8 @@ sampling: "weight"
 y_sampling: "None"
 
 network: "hybridvit"
+
+resume_model: null
 
 
 # Should the partitionings be re-generated when the script is run?
@@ -57,12 +62,12 @@ epochs_per_round: 10
 fed_batch_size: 10
 fed_num_workers: 4
 
-num_clients_per_round: 2
-num_evaluate_clients_per_round: 2
-num_total_clients: 6
+num_clients_per_round: 3
+num_evaluate_clients_per_round: 3
+num_total_clients: 12
 ####### Ray and hydra params #######
-cpus_per_client: 4
-gpus_per_client: 1
+cpus_per_client: 3
+gpus_per_client: 0.66
 hydra.job.chdir: False
 is_simulation: True
 
@@ -82,12 +87,21 @@ generate_partitions:
   activities: ${activities}
   views: ${views}
   axis: ${axis}
+  split_modalities: ${split_modalities}
 
 
 get_generate_model:
   _target_: "utils.flower.get_generate_model"
   network: ${network}
+  input_dim: ${input_dim}
 
+get_transform_x:
+  _target_: "utils.flower.get_transform_x_pad_concat"
+  input_dim: ${input_dim}
+  axis: ${axis}
+
+get_transform_y:
+  _target_: "utils.flower.get_transform_noop"
 
 
 # Returns a client generating function
@@ -128,8 +142,6 @@ get_on_fit_metrics_agg_fn:
 
 get_on_evaluate_metrics_agg_fn:
   _target_: utils.flower.weighted_average
-
-
 
 # Plot results
 # unlikely to change

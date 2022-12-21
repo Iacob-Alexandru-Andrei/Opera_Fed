@@ -22,6 +22,23 @@ import shutup
 shutup.please()
 
 
+def test_clients(
+    num_clients,
+    client_fn,
+    weights,
+    on_fit_config_fn,
+    on_evaluate_config_fn,
+    evaluate_fn,
+):
+    print(evaluate_fn(0, weights, on_evaluate_config_fn(0)))
+    for i in range(num_clients):
+        client = client_fn(i)
+        cnfg = on_fit_config_fn(0)
+        cnfg["epochs"] = 1
+        print(client.fit(weights, cnfg)[-1])
+        print(client.evaluate(weights, on_evaluate_config_fn(0)))
+
+
 @hydra.main(
     config_path="conf/federated/default", config_name="config", version_base=None
 )
@@ -33,14 +50,17 @@ def main(cfg: DictConfig) -> None:
     environ["NUMEXPR_MAX_THREADS"] = "12"
     output_directory = Path(to_absolute_path(HydraConfig.get().runtime.output_dir))
     original_cwd = get_original_cwd()
-
+    print(output_directory)
     chdir(original_cwd)
 
-    model_generator = call(cfg.get_generate_model)
+    model_generator, federated_model_generator_extractor = call(cfg.get_generate_model)
+    transform_x = call(cfg.get_transform_x)
+    transform_y = call(cfg.get_transform_y)
 
     # Just to test before launching ray
-    model = model_generator()
-    weights = [val.cpu().numpy() for _, val in model.state_dict().items()]
+    federated_model_generator = federated_model_generator_extractor(model_generator)
+    federated_model = federated_model_generator()
+    weights = [val.cpu().numpy() for _, val in federated_model.state_dict().items()]
 
     src_dir = Path(original_cwd)
     fed_dir = Path(cfg.fed_dir)
@@ -65,13 +85,15 @@ def main(cfg: DictConfig) -> None:
     on_evaluate_config_fn = call(cfg.gen_on_evaluate_config_fn)
 
     initial_parameters = call(
-        cfg.get_initial_parameters, model_generator=model_generator
+        cfg.get_initial_parameters, model_generator=federated_model_generator
     )
 
     # Get centralized evaluation function - see config files for details
     evaluate_fn = call(
         cfg.get_fed_eval_fn,
-        model_generator=model_generator,
+        model_generator=federated_model_generator,
+        transform_x=transform_x,
+        transform_y=transform_y,
     )
 
     fit_agg_func = call(cfg.get_on_fit_metrics_agg_fn)
@@ -105,11 +127,23 @@ def main(cfg: DictConfig) -> None:
             cfg.get_ray_client_fn,
             model_generator=model_generator,
             fed_dir=fed_dir,
+            transform_x=transform_x,
+            transform_y=transform_y,
         )
-        client = client_fn(0)
-        client.fit(weights, on_fit_config_fn(0))[-1]
-        client.evaluate(weights, on_evaluate_config_fn(0))
-        evaluate_fn(0, weights, on_evaluate_config_fn(0))
+        if cfg.get("debug", False):
+            client = client_fn(1)
+            cnfg = on_fit_config_fn(0)
+            cnfg["epochs"] = 1
+            print(client.fit(weights, cnfg)[-1])
+
+            test_clients(
+                cfg.num_total_clients,
+                client_fn=client_fn,
+                weights=weights,
+                on_fit_config_fn=on_fit_config_fn,
+                on_evaluate_config_fn=on_evaluate_config_fn,
+                evaluate_fn=evaluate_fn,
+            )
         hist = fl.simulation.start_simulation(
             client_fn=client_fn,
             num_clients=cfg.num_total_clients,

@@ -13,6 +13,8 @@ from torchvision.datasets.folder import ImageFolder
 
 from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
+from torch.utils.data import Dataset
+
 
 from data.transform.utils import *
 from data.selection.utils import *
@@ -26,11 +28,57 @@ def seed_worker(worker_id):
     random.seed(worker_seed)
 
 
-def create_dataloader(*arrays, label="None", batch_size=64, num_workers=0):
-    tensors = [torch.Tensor(arr) for arr in arrays]
+class SimpleTensorDataset(Dataset):
+    def __init__(self, arrays, transform_x, transform_y) -> None:
+        def flatten_or_return(container):
+            def flatten(container):
+                for i in container:
+                    if type(i) == list or type(i) == tuple:
+                        for j in flatten(i):
+                            yield j
+                    else:
+                        yield i
+
+            if type(container) == list or type(container) == tuple:
+                return flatten(container)
+            else:
+                return [container]
+
+        self.data, self.labels = arrays
+        self.data = flatten_or_return(self.data)
+        self.labels = flatten_or_return(self.labels)
+
+        self.data = torch.cat([(torch.Tensor(arr)) for arr in self.data])
+        self.data = torch.stack([transform_x(t) for t in self.data])
+
+        self.labels = torch.cat([(torch.Tensor([arr])) for arr in self.labels]).long()
+        self.labels = torch.cat([transform_y(t) for t in self.labels])
+
+    def __getitem__(self, index):
+        X = self.data[index]
+        y = self.labels[index]
+        return X, y
+
+    def __len__(self):
+        return self.data.size(0)
+
+
+def create_dataloader(
+    *arrays,
+    label="None",
+    batch_size=64,
+    num_workers=0,
+    transform_x,
+    transform_y,
+    sampler=None,
+):
+
     if type(label) != str:
-        tensors.append(torch.Tensor(label).long())
-    tensordataset = torch.utils.data.TensorDataset(*tensors)
+        arrays = (arrays, label)
+
+    tensordataset = SimpleTensorDataset(
+        arrays=arrays, transform_x=transform_x, transform_y=transform_y
+    )
     dataloader = torch.utils.data.DataLoader(
         tensordataset,
         batch_size=batch_size,
@@ -38,6 +86,7 @@ def create_dataloader(*arrays, label="None", batch_size=64, num_workers=0):
         num_workers=num_workers,
         worker_init_fn=seed_worker,
         drop_last=True,
+        sampler=sampler,
     )
     return dataloader
 
@@ -184,28 +233,15 @@ def apply_sampling(X_train, X_test, y_train, y_test, sampling, lb, y_sampling=Fa
     return X_train, X_test, y_train, y_test
 
 
-def prepare_one_dataloader(X_train, y_train, sampling, batch_size, num_workers):
-    if isinstance(sampling, int):
-        if y_train.shape[0] < batch_size:
-            finetune_loader = create_dataloader(
-                X_train,
-                label=y_train,
-                batch_size=y_train.shape[0],
-                num_workers=num_workers,
-            )
-        else:
-            finetune_loader = create_dataloader(
-                X_train, label=y_train, batch_size=batch_size, num_workers=num_workers
-            )
-    else:
-        finetune_loader = create_dataloader(
-            X_train, label=y_train, batch_size=batch_size, num_workers=num_workers
-        )
-    return finetune_loader
-
-
-def prepare_dataloaders(
-    X_train, X_test, y_train, y_test, sampling, batch_size, num_workers
+def prepare_one_dataloader(
+    X_train,
+    y_train,
+    sampling,
+    batch_size,
+    num_workers,
+    transform_x,
+    transform_y,
+    sampler=None,
 ):
     if isinstance(sampling, int):
         if y_train.shape[0] < batch_size:
@@ -214,29 +250,95 @@ def prepare_dataloaders(
                 label=y_train,
                 batch_size=y_train.shape[0],
                 num_workers=num_workers,
-            )
-            validatn_loader = create_dataloader(
-                X_test,
-                label=y_test,
-                batch_size=y_test.shape[0],
-                num_workers=num_workers,
+                transform_x=transform_x,
+                transform_y=transform_y,
+                sampler=sampler,
             )
         else:
             finetune_loader = create_dataloader(
-                X_train, label=y_train, batch_size=batch_size, num_workers=num_workers
+                X_train,
+                label=y_train,
+                batch_size=batch_size,
+                num_workers=num_workers,
+                transform_x=transform_x,
+                transform_y=transform_y,
+                sampler=sampler,
+            )
+    else:
+        finetune_loader = create_dataloader(
+            X_train,
+            label=y_train,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            transform_x=transform_x,
+            transform_y=transform_y,
+            sampler=sampler,
+        )
+    return finetune_loader
+
+
+def prepare_dataloaders(
+    X_train,
+    X_test,
+    y_train,
+    y_test,
+    sampling,
+    batch_size,
+    num_workers,
+    transform_x,
+    transform_y,
+):
+    if isinstance(sampling, int):
+        if y_train.shape[0] < batch_size:
+            finetune_loader = create_dataloader(
+                X_train,
+                label=y_train,
+                batch_size=y_train.shape[0],
+                num_workers=num_workers,
+                transform_x=transform_x,
+                transform_y=transform_y,
             )
             validatn_loader = create_dataloader(
                 X_test,
                 label=y_test,
                 batch_size=y_test.shape[0],
                 num_workers=num_workers,
+                transform_x=transform_x,
+                transform_y=transform_y,
+            )
+        else:
+            finetune_loader = create_dataloader(
+                X_train,
+                label=y_train,
+                batch_size=batch_size,
+                num_workers=num_workers,
+                transform_x=transform_x,
+                transform_y=transform_y,
+            )
+            validatn_loader = create_dataloader(
+                X_test,
+                label=y_test,
+                batch_size=y_test.shape[0],
+                num_workers=num_workers,
+                transform_x=transform_x,
+                transform_y=transform_y,
             )
     else:
         finetune_loader = create_dataloader(
-            X_train, label=y_train, batch_size=batch_size, num_workers=num_workers
+            X_train,
+            label=y_train,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            transform_x=transform_x,
+            transform_y=transform_y,
         )
         validatn_loader = create_dataloader(
-            X_test, label=y_test, batch_size=y_test.shape[0], num_workers=num_workers
+            X_test,
+            label=y_test,
+            batch_size=y_test.shape[0],
+            num_workers=num_workers,
+            transform_x=transform_x,
+            transform_y=transform_y,
         )
     return finetune_loader, validatn_loader
 

@@ -128,7 +128,9 @@ get_on_fit_metrics_agg_fn:
 get_on_evaluate_metrics_agg_fn:
   _target_: utils.flower.weighted_average
 
-
+get_initial_parameters:
+  _target_: utils.flower.get_initial_parameters
+  resume_model: ${resume_model}
 
 # Plot results
 # unlikely to change

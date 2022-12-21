@@ -44,5 +44,5 @@ class SaveFedAvgM(SaveMixin, FedAvgM):
     pass
 
 
-class SaveFedYogid(SaveMixin, FedYogi):
+class SaveFedYogi(SaveMixin, FedYogi):
     pass

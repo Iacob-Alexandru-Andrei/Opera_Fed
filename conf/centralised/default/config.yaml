@@ -19,7 +19,10 @@ namings:
 partition_strs:
   - ""
 
-save_rounds: []
+
+resume_model: null
+
+save_rounds: [1]
 
 views: 'associated'
 axis: 3
@@ -51,8 +54,8 @@ num_clients_per_round: 1
 num_evaluate_clients_per_round: 0
 num_total_clients: 1
 ####### Ray and hydra params #######
-cpus_per_client: 4
-gpus_per_client: 1
+cpus_per_client: 8
+gpus_per_client: 2
 hydra.job.chdir: False
 is_simulation: True
 
@@ -84,6 +87,13 @@ get_generate_model:
 get_ray_client_fn:
   _target_: clients.client.get_ray_client_fn
 
+get_transform_y:
+  _target_: "utils.flower.get_transform_noop"
+
+
+get_transform_x:
+  _target_: "utils.flower.get_transform_noop"
+
 
 # Handles training parameters per round for each client
 gen_on_fit_config_fn:
@@ -100,8 +110,10 @@ gen_on_evaluate_config_fn:
   batch_size: ${batch_size}
   num_workers: ${num_workers}
 
+
 get_initial_parameters:
   _target_: utils.flower.get_initial_parameters
+  resume_model: ${resume_model}
 
 get_fed_eval_fn:
   _target_: utils.flower.get_fed_eval_fn
