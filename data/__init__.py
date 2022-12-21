@@ -79,10 +79,11 @@ def create_dataloader(
     tensordataset = SimpleTensorDataset(
         arrays=arrays, transform_x=transform_x, transform_y=transform_y
     )
+
     dataloader = torch.utils.data.DataLoader(
         tensordataset,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle= (True if sampler is None else False),
         num_workers=num_workers,
         worker_init_fn=seed_worker,
         drop_last=True,

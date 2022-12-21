@@ -12,7 +12,7 @@ from flwr.common.typing import NDArrays, Scalar
 from torch.utils.data import DataLoader
 from data.partition_data import get_partition_data, prepare_one_dataloader
 from train import train_client, test_client, train_federated_local_client
-from utils.flower import save_model
+from utils.flower import save_numpy
 from flwr.common.parameter import parameters_to_ndarrays, ndarrays_to_parameters
 from datetime import datetime
 import base64
@@ -70,13 +70,10 @@ class MixedAsyncRayClient(fl.client.NumPyClient):
         save_dir = Path(save_dir)
         full_path = save_dir / f"local_model_and_data_{self.unique_experiment_id}.{ext}"
         if full_path.exists():
-            weights = [
-                arr
-                for val in np.load(full_path, allow_pickle=True).values()
-                for arr in val
-            ]
+            *weights, replay_store = np.load(full_path, allow_pickle=True).values()
+
             parameters = ndarrays_to_parameters(weights)
-            return parameters
+            return parameters, replay_store
         else:
             weights = [
                 val.cpu().numpy()
@@ -84,13 +81,14 @@ class MixedAsyncRayClient(fl.client.NumPyClient):
             ]
             replay_store = []
             weights.append(replay_store)
-            return weights
+            return weights, replay_store
 
-    def save_model_and_replay_store(self, local_weights, ext="pt"):
-        save_model(
-            params=local_weights,
-            save_dir=Path(self.fed_dir) / {self.cid},
-            save_name=f"local_model_and_data_{self.unique_experiment_id}",
+    def save_model_and_replay_store(self, local_weights, replay_store, ext="pt"):
+        replay_store = np.array(replay_store)
+        save_numpy(
+            aggregate_ndarrays=[local_weights, replay_store],
+            save_dir=Path(self.fed_dir) / f"{self.cid}",
+            save_name=f"{self.unique_experiment_id}_local_model_and_data",
             ext=ext,
         )
 
@@ -119,13 +117,10 @@ class MixedAsyncRayClient(fl.client.NumPyClient):
             Tuple[NDArrays, int, Dict[str, Scalar]]: New set of weights,
             number of samples and dictionary of metrics.
         """
-        unique_experiment_id = config["unique_experiment_id"]
 
-        local_data = self.load_model_and_replay_store(
-            save_dir=Path(self.fed_dir) / {self.cid},
+        local_data, replay_store = self.load_model_and_replay_store(
+            save_dir=Path(self.fed_dir) / f"{self.cid}",
         )
-
-        replay_store = [val for val in local_data.pop()]
 
         replay_store_max_size = config["replay_store_max_size"]
 
@@ -136,6 +131,7 @@ class MixedAsyncRayClient(fl.client.NumPyClient):
         federated_model.to(self.device)
 
         local_model = self.set_local_parameters(local_data)
+        local_model.to(self.device)
 
         # train
         X, y, sampling = get_partition_data(
@@ -201,6 +197,7 @@ class MixedAsyncRayClient(fl.client.NumPyClient):
             device=self.device,
             criterion=self.criterion_generator(),
         )
+
         train_client(
             local_model,
             trainloader=async_loader,
@@ -219,6 +216,7 @@ class MixedAsyncRayClient(fl.client.NumPyClient):
             list(range(train_start_index, train_start_index + train_inc))
         )
 
+        new_replay_store = replay_store
         if len(replay_store) > replay_store_max_size:
             new_start = len(replay_store) - replay_store_max_size
             new_replay_store = replay_store[new_start:]
@@ -227,10 +225,8 @@ class MixedAsyncRayClient(fl.client.NumPyClient):
             val.cpu().numpy() for _, val in local_model.state_dict().items()
         ]
 
-        local_weights.append(np.array(new_replay_store))
-
         self.save_model_and_replay_store(
-            local_weights=local_weights,
+            local_weights=local_weights, replay_store=new_replay_store
         )
 
         return federated_weights, len(replay_loader), {}
@@ -249,11 +245,11 @@ class MixedAsyncRayClient(fl.client.NumPyClient):
             Tuple[float, int, Dict[str, float]]: Loss, number of samples and dictionary
             of metrics.
         """
-        federated_model = self.set_parameters(parameters)
+        federated_model = self.set_federated_parameters(parameters)
         federated_model.to(self.device)
 
-        *local_data, _ = self.load_model_and_replay_store(
-            save_dir=Path(self.fed_dir) / {self.cid},
+        local_data, replay_store = self.load_model_and_replay_store(
+            save_dir=Path(self.fed_dir) / f"{self.cid}",
         )
 
         local_model = self.set_local_parameters(local_data)
@@ -349,7 +345,7 @@ def get_mixed_async_client_fn(
         Callable[[str], RayClient]: [description]
     """
 
-    unique_experiment_id = base64.b64encode(os.urandom(32))[:8]
+    unique_experiment_id = datetime.now()
 
     def client_fn(cid: str) -> MixedAsyncRayClient:
 

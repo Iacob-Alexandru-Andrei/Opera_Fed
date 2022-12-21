@@ -31,14 +31,18 @@ import torch.nn.functional as F
 from flwr.common.parameter import parameters_to_ndarrays, ndarrays_to_parameters
 
 
-def save_model(params, save_dir, save_name, ext="pt"):
-    aggregate_ndarrays: List[np.ndarray] = parameters_to_ndarrays(params)
+def save_numpy(aggregate_ndarrays, save_dir, save_name, ext="pt") -> None:
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         save_dir / f"{save_name}.{ext}",
         aggregate_ndarrays,
     )
+
+
+def save_model(params, save_dir, save_name, ext="pt") -> None:
+    aggregate_ndarrays: List[np.ndarray] = parameters_to_ndarrays(params)
+    save_numpy(aggregate_ndarrays, save_dir=save_dir, save_name=save_name, ext=ext)
 
 
 def load_model(save_dir, save_name, ext="pt"):

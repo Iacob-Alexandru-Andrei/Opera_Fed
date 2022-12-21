@@ -42,7 +42,7 @@ resume_model: null
 
 # Should the partitionings be re-generated when the script is run?
 recreate_partitions: False
-debug: False
+debug: True
 
 ####### Local training params for model #######
 batch_size: 10
